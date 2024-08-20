@@ -1455,8 +1455,28 @@ fn main() -> ! {
                 let cb_op = gb.read_byte();
                 
                 match cb_op {
+                    0x00 => {
+                        debug_print_op(op, "RLC B", &gb);
+                        let carry = gb.registers.b >> 7;
+                        let result = (gb.registers.b << 1) | carry;
+                        gb.registers.b = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if carry != 0 { 0b00010000 } else { 0 };
+                    }
                     0x10 => {
                         debug_print_op(op, "RL B", &gb);
+                        let result = gb.registers.b << 1;
+                        gb.registers.b = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.b & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x20 => {
+                        debug_print_op(op, "SLA B", &gb);
                         let result = gb.registers.b << 1;
                         gb.registers.b = result;
                         gb.registers.f = 0;
@@ -1475,10 +1495,126 @@ fn main() -> ! {
                         gb.registers.f |= if (gb.registers.c & 0x80) != 0 { 0b00100000 } else { 0 };
                         gb.registers.f |= 0b00010000;
                     }
+                    0x22 => {
+                        debug_print_op(op, "SLA D", &gb);
+                        let result = gb.registers.d << 1;
+                        gb.registers.d = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.d & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x23 => {
+                        debug_print_op(op, "SLA E", &gb);
+                        let result = gb.registers.e << 1;
+                        gb.registers.e = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.e & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x24 => {
+                        debug_print_op(op, "SLA H", &gb);
+                        let result = gb.registers.h << 1;
+                        gb.registers.h = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.h & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x25 => {
+                        debug_print_op(op, "SLA L", &gb);
+                        let result = gb.registers.l << 1;
+                        gb.registers.l = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.l & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x26 => {
+                        debug_print_op(op, "SLA (HL)", &gb);
+                        let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                        let data = gb.fetch_byte(hl);
+                        let result = data << 1;
+                        gb.memory[hl as usize] = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (data & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x27 => {
+                        debug_print_op(op, "SLA A", &gb);
+                        let result = gb.registers.a << 1;
+                        gb.registers.a = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.a & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x28 => {
+                        debug_print_op(op, "SRA B", &gb);
+                        let result = (gb.registers.b >> 1) | (gb.registers.b & 0x80);
+                        gb.registers.b = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.b & 0x01) != 0 { 0b00010000 } else { 0 };
+                    }
+                    0x29 => {
+                        debug_print_op(op, "SRA C", &gb);
+                        let result = (gb.registers.c >> 1) | (gb.registers.c & 0x80);
+                        gb.registers.c = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.c & 0x01) != 0 { 0b00010000 } else { 0 };
+                    }
+                    0x30 => {
+                        debug_print_op(op, "SWAP B", &gb);
+                        let result = ((gb.registers.b & 0x0F) << 4) | ((gb.registers.b & 0xF0) >> 4);
+                        gb.registers.b = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                    }
+                    0x3D => {
+                        debug_print_op(op, "SRL L", &gb);
+                        let carry = gb.registers.l & 0x01;
+                        let result = gb.registers.l >> 1;
+                        gb.registers.l = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if carry != 0 { 0b00010000 } else { 0 };
+                    }
+                    0x40 => {
+                        debug_print_op(op, "BIT 0, B", &gb);
+                        gb.registers.f &= 0b10010000;
+                        gb.registers.f |= if (gb.registers.b & 0x01) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b00100000;
+                    }
                     0x45 => {
                         debug_print_op(op, "BIT 0, L", &gb);
                         gb.registers.f &= 0b10010000;
                         gb.registers.f |= if (gb.registers.l & 0x01) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b00100000;
+                    }
+                    0x50 => {
+                        debug_print_op(op, "BIT 2, B", &gb);
+                        gb.registers.f &= 0b10010000;
+                        gb.registers.f |= if (gb.registers.b & 0x04) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b00100000;
+                    }
+                    0x51 => {
+                        debug_print_op(op, "BIT 2, C", &gb);
+                        gb.registers.f &= 0b10010000;
+                        gb.registers.f |= if (gb.registers.c & 0x04) == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b00100000;
                     }
                     _ => {
