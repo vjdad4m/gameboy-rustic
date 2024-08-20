@@ -45,30 +45,44 @@ impl GameBoyState {
         self.memory[address as usize]
     }
 
+    fn read_nn_lsb_msb(&mut self) -> (u16, u8, u8) {
+        let lsb = self.fetch_byte(self.pc);
+        let msb = self.fetch_byte(self.pc + 1);
+        self.pc += 2;
+        let nn: u16 = ((msb as u16) << 8) | (lsb as u16);
+        return (nn, lsb, msb);
+    }
+
     fn dump_registers(&self) {
-        println!("A: {:02X}", self.registers.a);
-        println!("B: {:02X}", self.registers.b);
-        println!("C: {:02X}", self.registers.c);
-        println!("D: {:02X}", self.registers.d);
-        println!("E: {:02X}", self.registers.e);
-        println!("F: {:02X}", self.registers.f);
-        println!("H: {:02X}", self.registers.h);
-        println!("L: {:02X}", self.registers.l);
+        print!("A: 0x{:02X}  ", self.registers.a);
+        print!("B: 0x{:02X}  ", self.registers.b);
+        print!("C: 0x{:02X}  ", self.registers.c);
+        print!("D: 0x{:02X}  ", self.registers.d);
+        print!("E: 0x{:02X}  ", self.registers.e);
+        print!("F: 0x{:02X}  ", self.registers.f);
+        print!("H: 0x{:02X}  ", self.registers.h);
+        print!("L: 0x{:02X}  ", self.registers.l);
+        println!();
     }
 
     fn dump_memory(&self) {
-        for i in 0..0xFFFF {
+        for i in 0..self.memory.len() {
+            print!("{:02X} ", self.memory[i]);
             if (i+1) % 32 == 0 {
                 println!();
             }
-            print!("{:02X} ", self.memory[i]);
         }
         println!();
     }
 }
 
-fn main() {
-    let rom_file: &str = "./rom/gb-test-roms/cpu_instrs/cpu_instrs.gb";
+fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
+    println!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}", op, name, state.pc, state.sp);
+    state.dump_registers();
+}
+
+fn main() -> ! {
+    let rom_file: &str = "./rom/snake.gb";
     let rom: Vec<u8> = std::fs::read(rom_file).unwrap();
     let mut gb = GameBoyState::new();
     gb.load_rom(rom);
@@ -84,10 +98,37 @@ fn main() {
 
         match op {
             0x00 => {
-                println!("NOP");
+                debug_print_op(op, "NOP", &gb);
+            }
+            0x31 => {
+                debug_print_op(op, "LD SP, nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                gb.sp = nn;
+            }
+            0xC3 => {
+                debug_print_op(op, "JP nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                gb.pc = nn;
+            }
+            0xCD => {
+                debug_print_op(op, "CALL nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = nn;
+            }
+            0xE0 => {
+                debug_print_op(op, "LDH (n), A", &gb);
+                let n = gb.fetch_byte(gb.pc);
+                gb.memory[0xFF00 + n as usize] = gb.registers.a;
+                gb.pc += 1;
             }
             _ => {
-                panic!("Unknown opcode: {:02X}", op);
+                panic!("unknown opcode: 0x{:02X}", op);
             }
         }
     }
