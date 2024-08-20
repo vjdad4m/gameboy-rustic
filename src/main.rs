@@ -14,6 +14,7 @@ struct GameBoyState {
     registers: GameBoyRegister,
     sp: u16,
     pc: u16,
+    ime: bool,
 }
 
 impl GameBoyState {
@@ -32,6 +33,7 @@ impl GameBoyState {
             },
             sp: 0xFFFE,
             pc: 0x100,
+            ime: false,
         }
     }
 
@@ -91,8 +93,8 @@ impl GameBoyState {
 }
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
-    println!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}", op, name, state.pc, state.sp);
-    // state.dump_registers();
+    print!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}\t", op, name, state.pc, state.sp);
+    state.dump_registers();
 }
 
 fn main() -> ! {
@@ -1738,7 +1740,7 @@ fn main() -> ! {
             0xD9 => {
                 debug_print_op(op, "RETI", &gb);
                 gb.pc = gb.read_nn_from_stack();
-                gb.memory[0xFFFF] = 1; // enable interrupts
+                gb.ime = true;
             }
             0xDA => {
                 debug_print_op(op, "JP C, nn", &gb);
@@ -1876,7 +1878,7 @@ fn main() -> ! {
             }
             0xF3 => {
                 debug_print_op(op, "DI", &gb);
-                gb.memory[0xFFFF] = 0; // disable interrupts
+                gb.ime = false;
             }
             0xF5 => {
                 debug_print_op(op, "PUSH AF", &gb);
@@ -1925,6 +1927,7 @@ fn main() -> ! {
             }
             0xFB => {
                 debug_print_op(op, "EI", &gb);
+                gb.ime = true;
             }
             0xFE => {
                 debug_print_op(op, "CP n", &gb);
