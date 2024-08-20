@@ -390,8 +390,8 @@ fn main() -> ! {
                 gb.registers.h = gb.read_byte();
             }
             0x27 => {
-                debug_print_op(op, "DAA", &gb);
                 // NOTE: validate implementation of decimal adjust
+                debug_print_op(op, "DAA", &gb);
                 let mut a = gb.registers.a;
                 let mut adjust = 0;
                 if gb.registers.f & 0b00100000 != 0 || (a & 0xF) > 9 {
@@ -1030,6 +1030,56 @@ fn main() -> ! {
                 gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
                 gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
             }
+            0x91 => {
+                debug_print_op(op, "SUB C", &gb);
+                let result = gb.registers.a.wrapping_sub(gb.registers.c);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+            }
+            0x92 => {
+                debug_print_op(op, "SUB D", &gb);
+                let result = gb.registers.a.wrapping_sub(gb.registers.d);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+            }
+            0x93 => {
+                debug_print_op(op, "SUB E", &gb);
+                let result = gb.registers.a.wrapping_sub(gb.registers.e);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+            }
+            0x94 => {
+                debug_print_op(op, "SUB H", &gb);
+                let result = gb.registers.a.wrapping_sub(gb.registers.h);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+            }
+            0x95 => {
+                debug_print_op(op, "SUB L", &gb);
+                let result = gb.registers.a.wrapping_sub(gb.registers.l);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+            }
             0x96 => {
                 debug_print_op(op, "SUB (HL)", &gb);
                 let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
@@ -1042,8 +1092,97 @@ fn main() -> ! {
                 gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
                 gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
             }
+            0x97 => {
+                debug_print_op(op, "SUB A", &gb);
+                let result = gb.registers.a.wrapping_sub(gb.registers.a);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+            }
+            0x98 => {
+                debug_print_op(op, "SBC B", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(gb.registers.b).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+            }
+            0x99 => {
+                debug_print_op(op, "SBC C", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(gb.registers.c).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+            }
+            0x9A => {
+                debug_print_op(op, "SBC D", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(gb.registers.d).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+            }
+            0x9B => {
+                debug_print_op(op, "SBC E", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(gb.registers.e).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+            }
+            0x9C => {
+                debug_print_op(op, "SBC H", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(gb.registers.h).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+            }
+            0x9D => {
+                debug_print_op(op, "SBC L", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(gb.registers.l).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+            }
+            0x9E => {
+                debug_print_op(op, "SBC (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let data = gb.fetch_byte(hl);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_sub(data).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
+            }
             0x9F => {
-                debug_print_op(op, "SBC A, A", &gb);
+                debug_print_op(op, "SBC A", &gb);
                 let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
                 let result = gb.registers.a.wrapping_sub(gb.registers.a).wrapping_sub(carry);
                 gb.registers.a = result;
@@ -1056,6 +1195,66 @@ fn main() -> ! {
             0xA0 => {
                 debug_print_op(op, "AND B", &gb);
                 gb.registers.a &= gb.registers.b;
+            }
+            0xA1 => {
+                debug_print_op(op, "AND C", &gb);
+                gb.registers.a &= gb.registers.c;
+            }
+            0xA2 => {
+                debug_print_op(op, "AND D", &gb);
+                gb.registers.a &= gb.registers.d;
+            }
+            0xA3 => {
+                debug_print_op(op, "AND E", &gb);
+                gb.registers.a &= gb.registers.e;
+            }
+            0xA4 => {
+                debug_print_op(op, "AND H", &gb);
+                gb.registers.a &= gb.registers.h;
+            }
+            0xA5 => {
+                debug_print_op(op, "AND L", &gb);
+                gb.registers.a &= gb.registers.l;
+            }
+            0xA6 => {
+                debug_print_op(op, "AND (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let data = gb.fetch_byte(hl);
+                gb.registers.a &= data;
+            }
+            0xA7 => {
+                debug_print_op(op, "AND A", &gb);
+                gb.registers.a &= gb.registers.a;
+            }
+            0xA8 => {
+                debug_print_op(op, "XOR B", &gb);
+                gb.registers.a ^= gb.registers.b;
+            }
+            0xA9 => {
+                debug_print_op(op, "XOR C", &gb);
+                gb.registers.a ^= gb.registers.c;
+            }
+            0xAA => {
+                debug_print_op(op, "XOR D", &gb);
+                gb.registers.a ^= gb.registers.d;
+            }
+            0xAB => {
+                debug_print_op(op, "XOR E", &gb);
+                gb.registers.a ^= gb.registers.e;
+            }
+            0xAC => {
+                debug_print_op(op, "XOR H", &gb);
+                gb.registers.a ^= gb.registers.h;
+            }
+            0xAD => {
+                debug_print_op(op, "XOR L", &gb);
+                gb.registers.a ^= gb.registers.l;
+            }
+            0xAE => {
+                debug_print_op(op, "XOR (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let data = gb.fetch_byte(hl);
+                gb.registers.a ^= data;
             }
             0xAF => {
                 debug_print_op(op, "XOR A", &gb);
@@ -1206,6 +1405,35 @@ fn main() -> ! {
                     gb.pc = nn;
                 }
             }
+            0xC5 => {
+                debug_print_op(op, "PUSH BC", &gb);
+                let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (bc >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (bc & 0xFF) as u8;
+            }
+            0xC6 => {
+                debug_print_op(op, "ADD n", &gb);
+                let n = gb.read_byte();
+                let result = gb.registers.a.wrapping_add(n);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
+            }
+            0xC7 => {
+                debug_print_op(op, "RST 00H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0000;
+            }
             0xC8 => {
                 debug_print_op(op, "RET Z", &gb);
                 if gb.registers.f & 0b10000000 != 0 {
@@ -1215,6 +1443,13 @@ fn main() -> ! {
             0xC9 => {
                 debug_print_op(op, "RET", &gb);
                 gb.pc = gb.read_nn_from_stack();
+            }
+            0xCA => {
+                debug_print_op(op, "JP Z, nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                if gb.registers.f & 0b10000000 != 0 {
+                    gb.pc = nn;
+                }
             }
             0xCB => {
                 let cb_op = gb.read_byte();
@@ -1251,6 +1486,19 @@ fn main() -> ! {
                     }
                 }
             }
+            0xCC => {
+                debug_print_op(op, "CALL Z, nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                if gb.registers.f & 0b10000000 != 0 {
+                    let pc_msb = gb.pc >> 8;
+                    let pc_lsb = gb.pc & 0xFF;
+                    gb.sp -= 1;
+                    gb.memory[gb.sp as usize] = pc_msb as u8;
+                    gb.sp -= 1;
+                    gb.memory[gb.sp as usize] = pc_lsb as u8;
+                    gb.pc = nn;
+                }
+            }
             0xCD => {
                 debug_print_op(op, "CALL nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
@@ -1261,6 +1509,28 @@ fn main() -> ! {
                 gb.sp -= 1;
                 gb.memory[gb.sp as usize] = pc_lsb as u8;
                 gb.pc = nn;
+            }
+            0xCE => {
+                debug_print_op(op, "ADC n", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let n = gb.read_byte();
+                let result = gb.registers.a.wrapping_add(n).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
+            }
+            0xCF => {
+                debug_print_op(op, "RST 08H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0008;
             }
             0xD0 => {
                 debug_print_op(op, "RET NC", &gb);
@@ -1313,6 +1583,69 @@ fn main() -> ! {
                 gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
                 gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
             }
+            0xD7 => {
+                debug_print_op(op, "RST 10H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0010;
+            }
+            0xD8 => {
+                debug_print_op(op, "RET C", &gb);
+                if gb.registers.f & 0b00010000 != 0 {
+                    gb.pc = gb.read_nn_from_stack();
+                }
+            }
+            0xD9 => {
+                debug_print_op(op, "RETI", &gb);
+                gb.pc = gb.read_nn_from_stack();
+                gb.memory[0xFFFF] = 1; // enable interrupts
+            }
+            0xDA => {
+                debug_print_op(op, "JP C, nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                if gb.registers.f & 0b00010000 != 0 {
+                    gb.pc = nn;
+                }
+            }
+            0xDC => {
+                debug_print_op(op, "CALL C, nn", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                if gb.registers.f & 0b00010000 != 0 {
+                    let pc_msb = gb.pc >> 8;
+                    let pc_lsb = gb.pc & 0xFF;
+                    gb.sp -= 1;
+                    gb.memory[gb.sp as usize] = pc_msb as u8;
+                    gb.sp -= 1;
+                    gb.memory[gb.sp as usize] = pc_lsb as u8;
+                    gb.pc = nn;
+                }
+            }
+            0xDE => {
+                debug_print_op(op, "SBC n", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let n = gb.read_byte();
+                let result = gb.registers.a.wrapping_sub(n).wrapping_sub(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
+            }
+            0xDF => {
+                debug_print_op(op, "RST 18H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0018;
+            }
             0xE0 => {
                 debug_print_op(op, "LDH (n), A", &gb);
                 let n = gb.read_byte();
@@ -1337,10 +1670,57 @@ fn main() -> ! {
                 gb.sp -= 1;
                 gb.memory[gb.sp as usize] = (hl & 0xFF) as u8;
             }
+            0xE6 => {
+                debug_print_op(op, "AND n", &gb);
+                let n = gb.read_byte();
+                gb.registers.a &= n;
+            }
+            0xE7 => {
+                debug_print_op(op, "RST 20H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0020;
+            }
+            0xE8 => {
+                debug_print_op(op, "ADD SP, e", &gb);
+                let e = gb.read_byte() as i8 as i16;
+                let sp = gb.sp as i16;
+                let result = sp.wrapping_add(e);
+                gb.sp = result as u16;
+                gb.registers.h = (result >> 8) as u8;
+                gb.registers.l = (result & 0xFF) as u8;
+                gb.registers.f = 0;
+                gb.registers.f |= if (sp & 0xF) + (e & 0xF) > 0xF { 0b00100000 } else { 0 };
+                gb.registers.f |= if (sp & 0xFF) + (e & 0xFF) > 0xFF { 0b00010000 } else { 0 };
+            }
+            0xE9 => {
+                debug_print_op(op, "JP HL", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.pc = hl;
+            }
             0xEA => {
                 debug_print_op(op, "LD (nn), A", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.memory[nn as usize] = gb.registers.a;
+            }
+            0xEE => {
+                debug_print_op(op, "XOR n", &gb);
+                let n = gb.read_byte();
+                gb.registers.a ^= n;
+            }
+            0xEF => {
+                debug_print_op(op, "RST 28H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0028;
             }
             0xF0 => {
                 debug_print_op(op, "LDH A, (n)", &gb);
@@ -1348,8 +1728,59 @@ fn main() -> ! {
                 gb.registers.a = gb.memory[0xFF00 + n as usize];
                 println!(">>>> HARDWARE READ: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + n as u16), gb.registers.a);
             }
+            0xF1 => {
+                debug_print_op(op, "POP AF", &gb);
+                let af = gb.read_nn_from_stack();
+                gb.registers.a = (af >> 8) as u8;
+                gb.registers.f = (af & 0xFF) as u8;
+            }
+            0xF2 => {
+                debug_print_op(op, "LD A, (C)", &gb);
+                gb.registers.a = gb.memory[0xFF00 + gb.registers.c as usize];
+            }
             0xF3 => {
                 debug_print_op(op, "DI", &gb);
+                gb.memory[0xFFFF] = 0; // disable interrupts
+            }
+            0xF5 => {
+                debug_print_op(op, "PUSH AF", &gb);
+                let af = ((gb.registers.a as u16) << 8) | (gb.registers.f as u16);
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (af >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (af & 0xFF) as u8;
+            }
+            0xF6 => {
+                debug_print_op(op, "OR n", &gb);
+                let n = gb.read_byte();
+                gb.registers.a |= n;
+            }
+            0xF7 => {
+                debug_print_op(op, "RST 30H", &gb);
+                let pc_msb = gb.pc >> 8;
+                let pc_lsb = gb.pc & 0xFF;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_msb as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = pc_lsb as u8;
+                gb.pc = 0x0030;
+            }
+            0xF8 => {
+                debug_print_op(op, "LD HL, SP+e", &gb);
+                let e = gb.read_byte() as i8 as i16;
+                let sp = gb.sp as i16;
+                let result = sp.wrapping_add(e);
+                gb.sp = result as u16;
+                gb.registers.h = (result >> 8) as u8;
+                gb.registers.l = (result & 0xFF) as u8;
+                gb.registers.f = 0;
+                gb.registers.f |= if (sp & 0xF) + (e & 0xF) > 0xF { 0b00100000 } else { 0 };
+                gb.registers.f |= if (sp & 0xFF) + (e & 0xFF) > 0xFF { 0b00010000 } else { 0 };
+            }
+            0xF9 => {
+                debug_print_op(op, "LD SP, HL", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.sp = hl;
             }
             0xFA => {
                 debug_print_op(op, "LD A, (nn)", &gb);
