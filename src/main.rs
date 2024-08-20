@@ -849,7 +849,7 @@ fn main() -> ! {
                 gb.registers.a = gb.registers.a;
             }
             0x80 => {
-                debug_print_op(op, "ADD A, B", &gb);
+                debug_print_op(op, "ADD B", &gb);
                 let result = gb.registers.a.wrapping_add(gb.registers.b);
                 gb.registers.a = result;
                 gb.registers.f = 0;
@@ -858,8 +858,28 @@ fn main() -> ! {
                 gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
                 gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
             }
+            0x81 => {
+                debug_print_op(op, "ADD C", &gb);
+                let result = gb.registers.a.wrapping_add(gb.registers.c);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+            }
+            0x82 => {
+                debug_print_op(op, "ADD D", &gb);
+                let result = gb.registers.a.wrapping_add(gb.registers.d);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+            }
             0x83 => {
-                debug_print_op(op, "ADD A, E", &gb);
+                debug_print_op(op, "ADD E", &gb);
                 let result = gb.registers.a.wrapping_add(gb.registers.e);
                 gb.registers.a = result;
                 gb.registers.f = 0;
@@ -867,6 +887,138 @@ fn main() -> ! {
                 gb.registers.f |= 0b01000000;
                 gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
                 gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+            }
+            0x84 => {
+                debug_print_op(op, "ADD H", &gb);
+                let result = gb.registers.a.wrapping_add(gb.registers.h);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+            }
+            0x85 => {
+                debug_print_op(op, "ADD L", &gb);
+                let result = gb.registers.a.wrapping_add(gb.registers.l);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+            }
+            0x86 => {
+                debug_print_op(op, "ADD (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let data = gb.fetch_byte(hl);
+                let result = gb.registers.a.wrapping_add(data);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
+            }
+            0x87 => {
+                debug_print_op(op, "ADD A", &gb);
+                let result = gb.registers.a.wrapping_add(gb.registers.a);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+            }
+            0x88 => {
+                debug_print_op(op, "ADC B", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.b).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+            }
+            0x89 => {
+                debug_print_op(op, "ADC C", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.c).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+            }
+            0x8A => {
+                debug_print_op(op, "ADC D", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.d).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+            }
+            0x8B => {
+                debug_print_op(op, "ADC E", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.e).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+            }
+            0x8C => {
+                debug_print_op(op, "ADC H", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.h).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+            }
+            0x8D => {
+                debug_print_op(op, "ADC L", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.l).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+            }
+            0x8E => {
+                debug_print_op(op, "ADC (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let data = gb.fetch_byte(hl);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(data).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
+            }
+            0x8F => {
+                debug_print_op(op, "ADC A", &gb);
+                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let result = gb.registers.a.wrapping_add(gb.registers.a).wrapping_add(carry);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
             }
             0x90 => {
                 debug_print_op(op, "SUB B", &gb);
@@ -1087,6 +1239,12 @@ fn main() -> ! {
                         gb.registers.f |= 0b01000000;
                         gb.registers.f |= if (gb.registers.c & 0x80) != 0 { 0b00100000 } else { 0 };
                         gb.registers.f |= 0b00010000;
+                    }
+                    0x45 => {
+                        debug_print_op(op, "BIT 0, L", &gb);
+                        gb.registers.f &= 0b10010000;
+                        gb.registers.f |= if (gb.registers.l & 0x01) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b00100000;
                     }
                     _ => {
                         panic!("unknown CB opcode: 0x{:02X}", cb_op);
