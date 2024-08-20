@@ -159,6 +159,14 @@ fn main() -> ! {
                 debug_print_op(op, "LD B, n", &gb);
                 gb.registers.b = gb.read_byte();
             }
+            0x09 => {
+                debug_print_op(op, "ADD HL, BC", &gb);
+                let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let result = hl.wrapping_add(bc);
+                gb.registers.h = (result >> 8) as u8;
+                gb.registers.l = (result & 0xFF) as u8;
+            }
             0x0B => {
                 debug_print_op(op, "DEC BC", &gb);
                 let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
@@ -264,6 +272,72 @@ fn main() -> ! {
                 debug_print_op(op, "LD A, n", &gb);
                 gb.registers.a = gb.read_byte();
             }
+            0x50 => {
+                debug_print_op(op, "LD D, B", &gb);
+                gb.registers.d = gb.registers.b;
+            }
+            0x51 => {
+                debug_print_op(op, "LD D, C", &gb);
+                gb.registers.d = gb.registers.c;
+            }
+            0x52 => {
+                debug_print_op(op, "LD D, D", &gb);
+                gb.registers.d = gb.registers.d;
+            }
+            0x53 => {
+                debug_print_op(op, "LD D, E", &gb);
+                gb.registers.d = gb.registers.e;
+            }
+            0x54 => {
+                debug_print_op(op, "LD D, H", &gb);
+                gb.registers.d = gb.registers.h;
+            }
+            0x55 => {
+                debug_print_op(op, "LD D, L", &gb);
+                gb.registers.d = gb.registers.l;
+            }
+            0x56 => {
+                debug_print_op(op, "LD D, (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.d = gb.fetch_byte(hl);
+            }
+            0x57 => {
+                debug_print_op(op, "LD D, A", &gb);
+                gb.registers.d = gb.registers.a;
+            }
+            0x58 => {
+                debug_print_op(op, "LD E, B", &gb);
+                gb.registers.e = gb.registers.b;
+            }
+            0x59 => {
+                debug_print_op(op, "LD E, C", &gb);
+                gb.registers.e = gb.registers.c;
+            }
+            0x5A => {
+                debug_print_op(op, "LD E, D", &gb);
+                gb.registers.e = gb.registers.d;
+            }
+            0x5B => {
+                debug_print_op(op, "LD E, E", &gb);
+                gb.registers.e = gb.registers.e;
+            }
+            0x5C => {
+                debug_print_op(op, "LD E, H", &gb);
+                gb.registers.e = gb.registers.h;
+            }
+            0x5D => {
+                debug_print_op(op, "LD E, L", &gb);
+                gb.registers.e = gb.registers.l;
+            }
+            0x5E => {
+                debug_print_op(op, "LD E, (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.e = gb.fetch_byte(hl);
+            }
+            0x5F => {
+                debug_print_op(op, "LD E, A", &gb);
+                gb.registers.e = gb.registers.a;
+            }
             0x78 => {
                 debug_print_op(op, "LD A, B", &gb);
                 gb.registers.a = gb.registers.b;
@@ -313,6 +387,26 @@ fn main() -> ! {
                 let cb_op = gb.read_byte();
                 
                 match cb_op {
+                    0x10 => {
+                        debug_print_op(op, "RL B", &gb);
+                        let result = gb.registers.b << 1;
+                        gb.registers.b = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.b & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
+                    0x21 => {
+                        debug_print_op(op, "SLA C", &gb);
+                        let result = gb.registers.c << 1;
+                        gb.registers.c = result;
+                        gb.registers.f = 0;
+                        gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= 0b01000000;
+                        gb.registers.f |= if (gb.registers.c & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= 0b00010000;
+                    }
                     _ => {
                         panic!("unknown CB opcode: 0x{:02X}", cb_op);
                     }
@@ -364,6 +458,6 @@ fn main() -> ! {
             }
         }
 
-        // std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
