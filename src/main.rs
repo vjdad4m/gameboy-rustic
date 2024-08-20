@@ -45,6 +45,12 @@ impl GameBoyState {
         self.memory[address as usize]
     }
 
+    fn read_byte(&mut self) -> u8 {
+        let byte = self.fetch_byte(self.pc);
+        self.pc += 1;
+        return byte;
+    }
+
     fn read_nn_lsb_msb(&mut self) -> (u16, u8, u8) {
         let lsb = self.fetch_byte(self.pc);
         let msb = self.fetch_byte(self.pc + 1);
@@ -93,22 +99,51 @@ fn main() -> ! {
     println!("Starting emulation loop");
 
     loop {
-        let op: u8 = gb.fetch_byte(gb.pc);
-        gb.pc += 1;
+        let op: u8 = gb.read_byte();
 
         match op {
             0x00 => {
                 debug_print_op(op, "NOP", &gb);
+            }
+            0x01 => {
+                debug_print_op(op, "LD BC, nn", &gb);
+                let (nn, lsb, msb) = gb.read_nn_lsb_msb();
+                gb.registers.b = msb;
+                gb.registers.c = lsb;
+            }
+            0x11 => {
+                debug_print_op(op, "LD DE, nn", &gb);
+                let (nn, lsb, msb) = gb.read_nn_lsb_msb();
+                gb.registers.d = msb;
+                gb.registers.e = lsb;
+            }
+            0x21 => {
+                debug_print_op(op, "LD HL, nn", &gb);
+                let (nn, lsb, msb) = gb.read_nn_lsb_msb();
+                gb.registers.h = msb;
+                gb.registers.l = lsb;
             }
             0x31 => {
                 debug_print_op(op, "LD SP, nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.sp = nn;
             }
+            0x3E => {
+                debug_print_op(op, "LD A, n", &gb);
+                gb.registers.a = gb.read_byte();
+            }
             0xC3 => {
                 debug_print_op(op, "JP nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.pc = nn;
+            }
+            0xC9 => {
+                debug_print_op(op, "RET", &gb);
+                let pc_lsb = gb.memory[gb.sp as usize];
+                gb.sp += 1;
+                let pc_msb = gb.memory[gb.sp as usize];
+                gb.sp += 1;
+                gb.pc = ((pc_msb as u16) << 8) | (pc_lsb as u16);
             }
             0xCD => {
                 debug_print_op(op, "CALL nn", &gb);
@@ -123,9 +158,13 @@ fn main() -> ! {
             }
             0xE0 => {
                 debug_print_op(op, "LDH (n), A", &gb);
-                let n = gb.fetch_byte(gb.pc);
+                let n = gb.read_byte();
                 gb.memory[0xFF00 + n as usize] = gb.registers.a;
-                gb.pc += 1;
+            }
+            0xEA => {
+                debug_print_op(op, "LD (nn), A", &gb);
+                let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
+                gb.memory[nn as usize] = gb.registers.a;
             }
             _ => {
                 panic!("unknown opcode: 0x{:02X}", op);
