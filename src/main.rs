@@ -167,6 +167,11 @@ fn main() -> ! {
                 gb.registers.h = (result >> 8) as u8;
                 gb.registers.l = (result & 0xFF) as u8;
             }
+            0x0A => {
+                debug_print_op(op, "LD A, (BC)", &gb);
+                let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
+                gb.registers.a = gb.fetch_byte(bc);
+            }
             0x0B => {
                 debug_print_op(op, "DEC BC", &gb);
                 let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
@@ -174,9 +179,38 @@ fn main() -> ! {
                 gb.registers.b = (result >> 8) as u8;
                 gb.registers.c = (result & 0xFF) as u8;
             }
+            0x0C => {
+                debug_print_op(op, "INC C", &gb);
+                let result = gb.registers.c.wrapping_add(1);
+                gb.registers.c = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.c & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b00010000;
+            }
+            0x0D => {
+                debug_print_op(op, "DEC C", &gb);
+                let result = gb.registers.c.wrapping_sub(1);
+                gb.registers.c = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.c & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b00010000;
+            }
             0x0E => {
                 debug_print_op(op, "LD C, n", &gb);
                 gb.registers.c = gb.read_byte();
+            }
+            0x0F => {
+                debug_print_op(op, "RRCA", &gb);
+                let carry = gb.registers.a & 0x01;
+                gb.registers.a = (gb.registers.a >> 1) | (carry << 7);
+                gb.registers.f = 0;
+                gb.registers.f |= if gb.registers.a == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if carry == 1 { 0b00010000 } else { 0 };
             }
             0x11 => {
                 debug_print_op(op, "LD DE, nn", &gb);
@@ -267,6 +301,26 @@ fn main() -> ! {
                 debug_print_op(op, "LD SP, nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.sp = nn;
+            }
+            0x3C => {
+                debug_print_op(op, "INC A", &gb);
+                let result = gb.registers.a.wrapping_add(1);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b00010000;
+            }
+            0x3D => {
+                debug_print_op(op, "DEC A", &gb);
+                let result = gb.registers.a.wrapping_sub(1);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b00010000;
             }
             0x3E => {
                 debug_print_op(op, "LD A, n", &gb);
