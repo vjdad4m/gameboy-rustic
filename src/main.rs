@@ -92,7 +92,7 @@ impl GameBoyState {
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
     println!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}", op, name, state.pc, state.sp);
-    // state.dump_registers();
+    state.dump_registers();
 }
 
 fn main() -> ! {
@@ -119,6 +119,13 @@ fn main() -> ! {
                 gb.registers.b = msb;
                 gb.registers.c = lsb;
             }
+            0x0B => {
+                debug_print_op(op, "DEC BC", &gb);
+                let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
+                let result = bc.wrapping_sub(1);
+                gb.registers.b = (result >> 8) as u8;
+                gb.registers.c = (result & 0xFF) as u8;
+            }
             0x11 => {
                 debug_print_op(op, "LD DE, nn", &gb);
                 let (nn, lsb, msb) = gb.read_nn_lsb_msb();
@@ -136,6 +143,11 @@ fn main() -> ! {
                 let result = de.wrapping_add(1);
                 gb.registers.d = (result >> 8) as u8;
                 gb.registers.e = (result & 0xFF) as u8;
+            }
+            0x18 => {
+                debug_print_op(op, "JR e", &gb);
+                let e = gb.read_byte() as i8;
+                gb.pc = gb.pc.wrapping_add(e as u16);
             }
             0x1A => {
                 debug_print_op(op, "LD A, (DE)", &gb);
@@ -235,6 +247,9 @@ fn main() -> ! {
                 debug_print_op(op, "LD (nn), A", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.memory[nn as usize] = gb.registers.a;
+            }
+            0xF3 => {
+                debug_print_op(op, "DI", &gb);
             }
             _ => {
                 panic!("unknown opcode: 0x{:02X}", op);
