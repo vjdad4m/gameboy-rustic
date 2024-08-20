@@ -21,14 +21,14 @@ impl GameBoyState {
         GameBoyState {
             memory: [0; 0xFFFF],
             registers: GameBoyRegister {
-                a: 0,
-                b: 0,
-                c: 0,
-                d: 0,
-                e: 0,
-                f: 0,
-                h: 0,
-                l: 0,
+                a: 0x01,
+                b: 0x00,
+                c: 0x13,
+                d: 0x00,
+                e: 0xD8,
+                f: 0xB0,
+                h: 0x01,
+                l: 0x4D,
             },
             sp: 0xFFFE,
             pc: 0x100,
@@ -92,7 +92,7 @@ impl GameBoyState {
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
     println!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}", op, name, state.pc, state.sp);
-    state.dump_registers();
+    // state.dump_registers();
 }
 
 fn main() -> ! {
@@ -154,6 +154,13 @@ fn main() -> ! {
                 let de = ((gb.registers.d as u16) << 8) | (gb.registers.e as u16);
                 gb.registers.a = gb.fetch_byte(de);
             }
+            0x20 => {
+                debug_print_op(op, "JR NZ, e", &gb);
+                let e = gb.read_byte() as i8;
+                if gb.registers.f & 0b10000000 == 0 {
+                    gb.pc = gb.pc.wrapping_add(e as u16);
+                }
+            }
             0x21 => {
                 debug_print_op(op, "LD HL, nn", &gb);
                 let (nn, lsb, msb) = gb.read_nn_lsb_msb();
@@ -191,7 +198,6 @@ fn main() -> ! {
             }
             0x96 => {
                 debug_print_op(op, "SUB (HL)", &gb);
-                // NOTE: investigate if the flags are set correctly
                 let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
                 let data = gb.fetch_byte(hl);
                 let result = gb.registers.a.wrapping_sub(data);
@@ -248,12 +254,29 @@ fn main() -> ! {
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.memory[nn as usize] = gb.registers.a;
             }
+            0xF0 => {
+                debug_print_op(op, "LDH A, (n)", &gb);
+                let n = gb.read_byte();
+                gb.registers.a = gb.memory[0xFF00 + n as usize];
+            }
             0xF3 => {
                 debug_print_op(op, "DI", &gb);
+            }
+            0xFE => {
+                debug_print_op(op, "CP n", &gb);
+                let n = gb.read_byte();
+                let result = gb.registers.a.wrapping_sub(n);
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
             }
             _ => {
                 panic!("unknown opcode: 0x{:02X}", op);
             }
         }
+
+        // std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
