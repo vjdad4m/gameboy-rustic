@@ -10,7 +10,7 @@ struct GameBoyRegister {
 }
 
 struct GameBoyState {
-    memory: [u8; 0xFFFF],
+    memory: [u8; 0xFFFF + 1],
     registers: GameBoyRegister,
     sp: u16,
     pc: u16,
@@ -19,7 +19,7 @@ struct GameBoyState {
 impl GameBoyState {
     fn new() -> GameBoyState {
         GameBoyState {
-            memory: [0; 0xFFFF],
+            memory: [0; 0xFFFF + 1],
             registers: GameBoyRegister {
                 a: 0x01,
                 b: 0x00,
@@ -36,7 +36,7 @@ impl GameBoyState {
     }
 
     fn load_rom(&mut self, rom: Vec<u8>) {
-        for i in 0..rom.len()-1 {
+        for i in 0..rom.len() {
             self.memory[i] = rom[i];
         }
     }
@@ -229,7 +229,7 @@ fn main() -> ! {
             }
             0x11 => {
                 debug_print_op(op, "LD DE, nn", &gb);
-                let (nn, lsb, msb) = gb.read_nn_lsb_msb();
+                let (_nn, lsb, msb) = gb.read_nn_lsb_msb();
                 gb.registers.d = msb;
                 gb.registers.e = lsb;
             }
@@ -847,6 +847,16 @@ fn main() -> ! {
             0x7F => {
                 debug_print_op(op, "LD A, A", &gb);
                 gb.registers.a = gb.registers.a;
+            }
+            0x83 => {
+                debug_print_op(op, "ADD A, E", &gb);
+                let result = gb.registers.a.wrapping_add(gb.registers.e);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
             }
             0x96 => {
                 debug_print_op(op, "SUB (HL)", &gb);
