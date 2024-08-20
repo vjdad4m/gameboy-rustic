@@ -41,6 +41,10 @@ impl GameBoyState {
         }
     }
 
+    fn fetch_byte(&self, address: u16) -> u8 {
+        self.memory[address as usize]
+    }
+
     fn dump_registers(&self) {
         println!("A: {:02X}", self.registers.a);
         println!("B: {:02X}", self.registers.b);
@@ -68,7 +72,23 @@ fn main() {
     let rom: Vec<u8> = std::fs::read(rom_file).unwrap();
     let mut gb = GameBoyState::new();
     gb.load_rom(rom);
-    
+
     gb.dump_memory();
     gb.dump_registers();
+
+    println!("Starting emulation loop");
+
+    loop {
+        let op: u8 = gb.fetch_byte(gb.pc);
+        gb.pc += 1;
+
+        match op {
+            0x00 => {
+                println!("NOP");
+            }
+            _ => {
+                panic!("Unknown opcode: {:02X}", op);
+            }
+        }
+    }
 }
