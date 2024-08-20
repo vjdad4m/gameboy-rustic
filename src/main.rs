@@ -106,6 +106,10 @@ fn main() -> ! {
 
     println!("Starting emulation loop");
 
+    // set lcd status at 0xFF44
+    // NOTE: this is a hack to avoid the panic on the first read of the lcd status
+    gb.memory[0xFF44] = 0x90;
+
     loop {
         let op: u8 = gb.read_byte();
 
@@ -119,12 +123,52 @@ fn main() -> ! {
                 gb.registers.b = msb;
                 gb.registers.c = lsb;
             }
+            0x02 => {
+                debug_print_op(op, "LD (BC), A", &gb);
+                let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
+                gb.memory[bc as usize] = gb.registers.a;
+            }
+            0x03 => {
+                debug_print_op(op, "INC BC", &gb);
+                let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
+                let result = bc.wrapping_add(1);
+                gb.registers.b = (result >> 8) as u8;
+                gb.registers.c = (result & 0xFF) as u8;
+            }
+            0x04 => {
+                debug_print_op(op, "INC B", &gb);
+                let result = gb.registers.b.wrapping_add(1);
+                gb.registers.b = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.b & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b00010000;
+            }
+            0x05 => {
+                debug_print_op(op, "DEC B", &gb);
+                let result = gb.registers.b.wrapping_sub(1);
+                gb.registers.b = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.b & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b00010000;
+            }
+            0x06 => {
+                debug_print_op(op, "LD B, n", &gb);
+                gb.registers.b = gb.read_byte();
+            }
             0x0B => {
                 debug_print_op(op, "DEC BC", &gb);
                 let bc = ((gb.registers.b as u16) << 8) | (gb.registers.c as u16);
                 let result = bc.wrapping_sub(1);
                 gb.registers.b = (result >> 8) as u8;
                 gb.registers.c = (result & 0xFF) as u8;
+            }
+            0x0E => {
+                debug_print_op(op, "LD C, n", &gb);
+                gb.registers.c = gb.read_byte();
             }
             0x11 => {
                 debug_print_op(op, "LD DE, nn", &gb);
@@ -144,6 +188,10 @@ fn main() -> ! {
                 gb.registers.d = (result >> 8) as u8;
                 gb.registers.e = (result & 0xFF) as u8;
             }
+            0x16 => {
+                debug_print_op(op, "LD D, n", &gb);
+                gb.registers.d = gb.read_byte();
+            }
             0x18 => {
                 debug_print_op(op, "JR e", &gb);
                 let e = gb.read_byte() as i8;
@@ -153,6 +201,10 @@ fn main() -> ! {
                 debug_print_op(op, "LD A, (DE)", &gb);
                 let de = ((gb.registers.d as u16) << 8) | (gb.registers.e as u16);
                 gb.registers.a = gb.fetch_byte(de);
+            }
+            0x1E => {
+                debug_print_op(op, "LD E, n", &gb);
+                gb.registers.e = gb.read_byte();
             }
             0x20 => {
                 debug_print_op(op, "JR NZ, e", &gb);
@@ -166,6 +218,15 @@ fn main() -> ! {
                 let (nn, lsb, msb) = gb.read_nn_lsb_msb();
                 gb.registers.h = msb;
                 gb.registers.l = lsb;
+            }
+            0x22 => {
+                debug_print_op(op, "LD (HL+), A", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.memory[hl as usize] = gb.registers.a;
+                gb.registers.l = gb.registers.l.wrapping_add(1);
+                if gb.registers.l == 0 {
+                    gb.registers.h = gb.registers.h.wrapping_add(1);
+                }
             }
             0x28 => {
                 debug_print_op(op, "JR Z, n", &gb);
@@ -183,6 +244,17 @@ fn main() -> ! {
                     gb.registers.h = gb.registers.h.wrapping_add(1);
                 }
             }
+            0x2E => {
+                debug_print_op(op, "LD L, n", &gb);
+                gb.registers.l = gb.read_byte();
+            }
+            0x30 => {
+                debug_print_op(op, "JR NC, e", &gb);
+                let e = gb.read_byte() as i8;
+                if gb.registers.f & 0b00010000 == 0 {
+                    gb.pc = gb.pc.wrapping_add(e as u16);
+                }
+            }
             0x31 => {
                 debug_print_op(op, "LD SP, nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
@@ -195,6 +267,10 @@ fn main() -> ! {
             0x78 => {
                 debug_print_op(op, "LD A, B", &gb);
                 gb.registers.a = gb.registers.b;
+            }
+            0x79 => {
+                debug_print_op(op, "LD A, C", &gb);
+                gb.registers.a = gb.registers.c;
             }
             0x96 => {
                 debug_print_op(op, "SUB (HL)", &gb);
@@ -233,6 +309,15 @@ fn main() -> ! {
                 debug_print_op(op, "RET", &gb);
                 gb.pc = gb.read_nn_from_stack();
             }
+            0xCB => {
+                let cb_op = gb.read_byte();
+                
+                match cb_op {
+                    _ => {
+                        panic!("unknown CB opcode: 0x{:02X}", cb_op);
+                    }
+                }
+            }
             0xCD => {
                 debug_print_op(op, "CALL nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
@@ -248,6 +333,7 @@ fn main() -> ! {
                 debug_print_op(op, "LDH (n), A", &gb);
                 let n = gb.read_byte();
                 gb.memory[0xFF00 + n as usize] = gb.registers.a;
+                println!(">>>> HARDWARE WRITE: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + n as u16), gb.registers.a);
             }
             0xEA => {
                 debug_print_op(op, "LD (nn), A", &gb);
@@ -258,6 +344,7 @@ fn main() -> ! {
                 debug_print_op(op, "LDH A, (n)", &gb);
                 let n = gb.read_byte();
                 gb.registers.a = gb.memory[0xFF00 + n as usize];
+                println!(">>>> HARDWARE READ: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + n as u16), gb.registers.a);
             }
             0xF3 => {
                 debug_print_op(op, "DI", &gb);
