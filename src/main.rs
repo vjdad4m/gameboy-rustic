@@ -582,6 +582,64 @@ fn main() -> ! {
                 debug_print_op(op, "LD B, B", &gb);
                 gb.registers.b = gb.registers.b;
             }
+            0x41 => {
+                debug_print_op(op, "LD B, C", &gb);
+                gb.registers.b = gb.registers.c;
+            }
+            0x42 => {
+                debug_print_op(op, "LD B, D", &gb);
+                gb.registers.b = gb.registers.d;
+            }
+            0x43 => {
+                debug_print_op(op, "LD B, E", &gb);
+                gb.registers.b = gb.registers.e;
+            }
+            0x44 => {
+                debug_print_op(op, "LD B, H", &gb);
+                gb.registers.b = gb.registers.h;
+            }
+            0x45 => {
+                debug_print_op(op, "LD B, L", &gb);
+                gb.registers.b = gb.registers.l;
+            }
+            0x46 => {
+                debug_print_op(op, "LD B, (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.b = gb.fetch_byte(hl);
+            }
+            0x47 => {
+                debug_print_op(op, "LD B, A", &gb);
+                gb.registers.b = gb.registers.a;
+            }
+            0x48 => {
+                debug_print_op(op, "LD C, B", &gb);
+                gb.registers.c = gb.registers.b;
+            }
+            0x49 => {
+                debug_print_op(op, "LD C, C", &gb);
+                gb.registers.c = gb.registers.c;
+            }
+            0x4A => {
+                debug_print_op(op, "LD C, D", &gb);
+                gb.registers.c = gb.registers.d;
+            }
+            0x4B => {
+                debug_print_op(op, "LD C, E", &gb);
+                gb.registers.c = gb.registers.e;
+            }
+            0x4C => {
+                debug_print_op(op, "LD C, H", &gb);
+                gb.registers.c = gb.registers.h;
+            }
+            0x4D => {
+                debug_print_op(op, "LD C, L", &gb);
+                gb.registers.c = gb.registers.l;
+            }
+            0x4E => {
+                debug_print_op(op, "LD C, (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.c = gb.fetch_byte(hl);
+            }
             0x4F => {
                 debug_print_op(op, "LD C, A", &gb);
                 gb.registers.c = gb.registers.a;
@@ -655,6 +713,64 @@ fn main() -> ! {
             0x60 => {
                 debug_print_op(op, "LD H, B", &gb);
                 gb.registers.h = gb.registers.b;
+            }
+            0x61 => {
+                debug_print_op(op, "LD H, C", &gb);
+                gb.registers.h = gb.registers.c;
+            }
+            0x62 => {
+                debug_print_op(op, "LD H, D", &gb);
+                gb.registers.h = gb.registers.d;
+            }
+            0x63 => {
+                debug_print_op(op, "LD H, E", &gb);
+                gb.registers.h = gb.registers.e;
+            }
+            0x64 => {
+                debug_print_op(op, "LD H, H", &gb);
+                gb.registers.h = gb.registers.h;
+            }
+            0x65 => {
+                debug_print_op(op, "LD H, L", &gb);
+                gb.registers.h = gb.registers.l;
+            }
+            0x66 => {
+                debug_print_op(op, "LD H, (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.h = gb.fetch_byte(hl);
+            }
+            0x67 => {
+                debug_print_op(op, "LD H, A", &gb);
+                gb.registers.h = gb.registers.a;
+            }
+            0x68 => {
+                debug_print_op(op, "LD L, B", &gb);
+                gb.registers.l = gb.registers.b;
+            }
+            0x69 => {
+                debug_print_op(op, "LD L, C", &gb);
+                gb.registers.l = gb.registers.c;
+            }
+            0x6A => {
+                debug_print_op(op, "LD L, D", &gb);
+                gb.registers.l = gb.registers.d;
+            }
+            0x6B => {
+                debug_print_op(op, "LD L, E", &gb);
+                gb.registers.l = gb.registers.e;
+            }
+            0x6C => {
+                debug_print_op(op, "LD L, H", &gb);
+                gb.registers.l = gb.registers.h;
+            }
+            0x6D => {
+                debug_print_op(op, "LD L, L", &gb);
+                gb.registers.l = gb.registers.l;
+            }
+            0x6E => {
+                debug_print_op(op, "LD L, (HL)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.l = gb.fetch_byte(hl);
             }
             0x6F => {
                 debug_print_op(op, "LD L, A", &gb);
