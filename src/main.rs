@@ -59,6 +59,14 @@ impl GameBoyState {
         return (nn, lsb, msb);
     }
 
+    fn read_nn_from_stack(&mut self) -> u16 {
+        let lsb = self.memory[self.sp as usize];
+        self.sp += 1;
+        let msb = self.memory[self.sp as usize];
+        self.sp += 1;
+        return ((msb as u16) << 8) | (lsb as u16);
+    }
+
     fn dump_registers(&self) {
         print!("A: 0x{:02X}  ", self.registers.a);
         print!("B: 0x{:02X}  ", self.registers.b);
@@ -84,7 +92,7 @@ impl GameBoyState {
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
     println!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}", op, name, state.pc, state.sp);
-    state.dump_registers();
+    // state.dump_registers();
 }
 
 fn main() -> ! {
@@ -117,11 +125,44 @@ fn main() -> ! {
                 gb.registers.d = msb;
                 gb.registers.e = lsb;
             }
+            0x12 => {
+                debug_print_op(op, "LD (DE), A", &gb);
+                let de = ((gb.registers.d as u16) << 8) | (gb.registers.e as u16);
+                gb.memory[de as usize] = gb.registers.a;
+            }
+            0x13 => {
+                debug_print_op(op, "INC DE", &gb);
+                let de = ((gb.registers.d as u16) << 8) | (gb.registers.e as u16);
+                let result = de.wrapping_add(1);
+                gb.registers.d = (result >> 8) as u8;
+                gb.registers.e = (result & 0xFF) as u8;
+            }
+            0x1A => {
+                debug_print_op(op, "LD A, (DE)", &gb);
+                let de = ((gb.registers.d as u16) << 8) | (gb.registers.e as u16);
+                gb.registers.a = gb.fetch_byte(de);
+            }
             0x21 => {
                 debug_print_op(op, "LD HL, nn", &gb);
                 let (nn, lsb, msb) = gb.read_nn_lsb_msb();
                 gb.registers.h = msb;
                 gb.registers.l = lsb;
+            }
+            0x28 => {
+                debug_print_op(op, "JR Z, n", &gb);
+                let n = gb.read_byte();
+                if gb.registers.f & 0b10000000 != 0 {
+                    gb.pc = gb.pc.wrapping_add(n as u16);
+                }
+            }
+            0x2A => {
+                debug_print_op(op, "LD A, (HL+)", &gb);
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                gb.registers.a = gb.fetch_byte(hl);
+                gb.registers.l = gb.registers.l.wrapping_add(1);
+                if gb.registers.l == 0 {
+                    gb.registers.h = gb.registers.h.wrapping_add(1);
+                }
             }
             0x31 => {
                 debug_print_op(op, "LD SP, nn", &gb);
@@ -132,18 +173,47 @@ fn main() -> ! {
                 debug_print_op(op, "LD A, n", &gb);
                 gb.registers.a = gb.read_byte();
             }
+            0x78 => {
+                debug_print_op(op, "LD A, B", &gb);
+                gb.registers.a = gb.registers.b;
+            }
+            0x96 => {
+                debug_print_op(op, "SUB (HL)", &gb);
+                // NOTE: investigate if the flags are set correctly
+                let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
+                let data = gb.fetch_byte(hl);
+                let result = gb.registers.a.wrapping_sub(data);
+                gb.registers.a = result;
+                gb.registers.f = 0;
+                gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= 0b01000000;
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
+            }
+            0xB1 => {
+                debug_print_op(op, "OR C", &gb);
+                gb.registers.a |= gb.registers.c;
+            }
+            0xC0 => {
+                debug_print_op(op, "RET NZ", &gb);
+                if gb.registers.f & 0b10000000 == 0 {
+                    gb.pc = gb.read_nn_from_stack();
+                }
+            }
             0xC3 => {
                 debug_print_op(op, "JP nn", &gb);
                 let (nn, _lsb, _msb) = gb.read_nn_lsb_msb();
                 gb.pc = nn;
             }
+            0xC8 => {
+                debug_print_op(op, "RET Z", &gb);
+                if gb.registers.f & 0b10000000 != 0 {
+                    gb.pc = gb.read_nn_from_stack();
+                }
+            }
             0xC9 => {
                 debug_print_op(op, "RET", &gb);
-                let pc_lsb = gb.memory[gb.sp as usize];
-                gb.sp += 1;
-                let pc_msb = gb.memory[gb.sp as usize];
-                gb.sp += 1;
-                gb.pc = ((pc_msb as u16) << 8) | (pc_lsb as u16);
+                gb.pc = gb.read_nn_from_stack();
             }
             0xCD => {
                 debug_print_op(op, "CALL nn", &gb);
