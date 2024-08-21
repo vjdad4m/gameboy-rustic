@@ -15,7 +15,8 @@ struct GameBoyState {
     sp: u16,
     pc: u16,
     ime: bool,
-    cycles: u64,
+    cycles: u128,
+    div_cycles: u128,
 }
 
 impl GameBoyState {
@@ -36,6 +37,7 @@ impl GameBoyState {
             pc: 0x100,
             ime: false,
             cycles: 0,
+            div_cycles: 0,
         }
     }
 
@@ -95,7 +97,7 @@ impl GameBoyState {
 }
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
-    print!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}\t", op, name, state.pc, state.sp);
+    print!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}\tcounter: {:<8}\t", op, name, state.pc, state.sp, state.cycles);
     state.dump_registers();
 }
 
@@ -115,6 +117,9 @@ fn main() -> ! {
     gb.memory[0xFF44] = 0x90;
 
     loop {
+        let cycles_start: u128 = gb.cycles;
+        let div_initial: u8 = gb.memory[0xFF04];
+
         let op: u8 = gb.read_byte();
 
         match op {
@@ -2250,6 +2255,21 @@ fn main() -> ! {
             _ => {
                 panic!("unknown opcode: 0x{:02X}", op);
             }
+        }
+
+        let cycles_elapsed: u128 = gb.cycles - cycles_start;
+        gb.div_cycles += cycles_elapsed;
+        
+        // handle DIV register every 256 cycles
+        let div = gb.memory[0xFF04];
+        // check if div was written to
+        if div != div_initial {
+            gb.memory[0xFF04] = 0x00;
+        }
+
+        if gb.div_cycles >= 256 {
+            gb.memory[0xFF04] = gb.memory[0xFF04].wrapping_add(1);
+            gb.div_cycles -= 256;
         }
 
         // std::thread::sleep(std::time::Duration::from_millis(10));
