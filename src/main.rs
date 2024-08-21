@@ -28,6 +28,15 @@ struct GameBoyJoypad  {
     select: bool,
 }
 
+struct PPUState {
+    OAMSearch: bool,
+    PixelTransfer: bool,
+    HBlank: bool,
+    VBlank: bool,
+    X: u8,
+    ticks: u64,
+}
+
 struct GameBoyState {
     memory: [u8; 0xFFFF + 1],
     registers: GameBoyRegister,
@@ -39,6 +48,7 @@ struct GameBoyState {
     div_cycles: u128,
     tima_cycles: u128,
     joypad: GameBoyJoypad,
+    ppu: PPUState,
 }
 
 impl GameBoyState {
@@ -71,6 +81,14 @@ impl GameBoyState {
                 b: false,
                 start: false,
                 select: false,
+            },
+            ppu: PPUState {
+                OAMSearch: true,
+                PixelTransfer: false,
+                HBlank: false,
+                VBlank: false,
+                X: 0,
+                ticks: 0,
             },
         }
     }
@@ -166,10 +184,10 @@ impl GameBoyState {
     }
 
     fn handle_key(&mut self, key: Keycode, pressed: bool) {
-        println!("Key: {:?} pressed: {}", key, pressed);
         fn has_changed(old: bool, new: bool) -> bool {
             old != new
         }
+
         let mut previous_state: bool = false;
         match key {
             Keycode::W => { previous_state = self.joypad.up; self.joypad.up = pressed; },
@@ -216,7 +234,6 @@ fn main() -> ! {
     // set lcd status at 0xFF44
     // NOTE: this is a hack to avoid the panic on the first read of the lcd status
     gb.memory[0xFF44] = 0x90;
-
     loop {
         let cycles_start: u128 = gb.cycles;
         let div_initial: u8 = gb.memory[0xFF04];
@@ -3440,7 +3457,59 @@ fn main() -> ! {
             std::thread::sleep(sleep_time);
         }
 
-        // update screen
+        // emulate ppu for cycles_elapsed cycles times 2
+        let lcdc = gb.memory[0xFF40];
+        if lcdc & 0b10000000 != 0 { // ppu is enabled
+            for _ in 0..cycles_elapsed * 2 {
+                gb.ppu.ticks += 1;
+                if gb.ppu.OAMSearch {
+                    if gb.ppu.ticks == 40 {
+                        gb.ppu.X = 0;
+                        let tile_line = gb.memory[0xFF44] % 8;
+                        gb.ppu.OAMSearch = false;
+                        gb.ppu.PixelTransfer = true;
+                    }
+                }
+                else if gb.ppu.PixelTransfer {
+                    gb.ppu.X += 1;
+                    if gb.ppu.X == 160 {
+                        gb.ppu.PixelTransfer = false;
+                        gb.ppu.HBlank = true;
+                    }
+                }
+                else if gb.ppu.HBlank {
+                    // set 0xFF41
+                    gb.memory[0xFF41] &= 0b11111100;
+                    if gb.ppu.ticks == 456 {
+                        gb.ppu.ticks = 0;
+                        gb.memory[0xFF44] += 1;
+                        if gb.memory[0xFF44] == 144 {
+                            gb.ppu.HBlank = false;
+                            gb.ppu.VBlank = true;
+                            gb.memory[0xFF0F] |= 0b00000001;
+                            println!("!!!!!!!!!!!!!");
+                        }
+                        else {
+                            gb.ppu.HBlank = false;
+                            gb.ppu.OAMSearch = true;
+                        }
+                    }
+                }
+                else if gb.ppu.VBlank {
+                    if gb.ppu.ticks == 456 {
+                        gb.ppu.ticks = 0;
+                        gb.memory[0xFF44] += 1;
+                        if gb.memory[0xFF44] == 0x99 {
+                            gb.memory[0xFF44] = 0x00;
+                            gb.ppu.VBlank = false;
+                            gb.ppu.OAMSearch = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // update display events
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => {
