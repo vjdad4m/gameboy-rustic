@@ -17,6 +17,7 @@ struct GameBoyState {
     ime: bool,
     cycles: u128,
     div_cycles: u128,
+    tima_cycles: u128,
 }
 
 impl GameBoyState {
@@ -38,6 +39,7 @@ impl GameBoyState {
             ime: false,
             cycles: 0,
             div_cycles: 0,
+            tima_cycles: 0,
         }
     }
 
@@ -45,6 +47,43 @@ impl GameBoyState {
         for i in 0..rom.len() {
             self.memory[i] = rom[i];
         }
+    }
+
+    fn reset(&mut self) {
+        // intial memory state from http://www.codeslinger.co.uk/pages/projects/gameboy/hardware.html.
+        self.registers.a = 0x01;
+        self.registers.b = 0x00;
+        self.registers.c = 0x13;
+        self.registers.d = 0x00;
+        self.registers.e = 0xD8;
+        self.registers.f = 0xB0;
+        self.registers.h = 0x01;
+        self.registers.l = 0x4D;
+        self.sp = 0xFFFE;
+        self.pc = 0x100;
+        self.ime = false;
+        self.cycles = 0;
+        self.div_cycles = 0;
+        self.tima_cycles = 0;
+        self.memory[0xFF10] = 0x80;
+        self.memory[0xFF11] = 0xBF;
+        self.memory[0xFF12] = 0xF3;
+        self.memory[0xFF14] = 0xBF;
+        self.memory[0xFF16] = 0x3F;
+        self.memory[0xFF19] = 0xBF;
+        self.memory[0xFF1A] = 0x7F;
+        self.memory[0xFF1B] = 0xFF;
+        self.memory[0xFF1C] = 0x9F;
+        self.memory[0xFF1E] = 0xBF;
+        self.memory[0xFF20] = 0xFF;
+        self.memory[0xFF23] = 0xBF;
+        self.memory[0xFF24] = 0x77;
+        self.memory[0xFF25] = 0xF3;
+        self.memory[0xFF26] = 0xF1;
+        self.memory[0xFF40] = 0x91;
+        self.memory[0xFF47] = 0xFC;
+        self.memory[0xFF48] = 0xFF;
+        self.memory[0xFF49] = 0xFF;
     }
 
     fn fetch_byte(&self, address: u16) -> u8 {
@@ -82,13 +121,12 @@ impl GameBoyState {
         print!("F: 0x{:02X}  ", self.registers.f);
         print!("H: 0x{:02X}  ", self.registers.h);
         print!("L: 0x{:02X}  ", self.registers.l);
-        println!();
     }
 
     fn dump_memory(&self) {
         for i in 0..self.memory.len() {
             print!("{:02X} ", self.memory[i]);
-            if (i+1) % 32 == 0 {
+            if (i + 1) % 32 == 0 {
                 println!();
             }
         }
@@ -97,8 +135,12 @@ impl GameBoyState {
 }
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
-    print!("> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}\tcounter: {:<8}\t", op, name, state.pc, state.sp, state.cycles);
+    print!(
+        "> [0x{:02X}]\t{:<16}\tpc: 0x{:02X}  sp: 0x{:02X}\tcounter: {:<8}\t",
+        op, name, state.pc, state.sp, state.cycles
+    );
     state.dump_registers();
+    println!("\t{}", state.tima_cycles);
 }
 
 fn main() -> ! {
@@ -106,6 +148,7 @@ fn main() -> ! {
     let rom: Vec<u8> = std::fs::read(rom_file).unwrap();
     let mut gb = GameBoyState::new();
     gb.load_rom(rom);
+    gb.reset();
 
     gb.dump_memory();
     gb.dump_registers();
@@ -119,6 +162,68 @@ fn main() -> ! {
     loop {
         let cycles_start: u128 = gb.cycles;
         let div_initial: u8 = gb.memory[0xFF04];
+
+        // check for interrupts
+        if gb.ime {
+            let interrupt_flags: u8 = gb.memory[0xFF0F];
+            let interrupt_enable: u8 = gb.memory[0xFFFF];
+            let interrupt_request: u8 = interrupt_flags & interrupt_enable;
+            // handle vblank interrupt
+            if interrupt_request & 0b00000001 != 0 {
+                println!(">>>> VBLANK INTERRUPT");
+                gb.ime = false;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc & 0xFF) as u8;
+                gb.pc = 0x40;
+                gb.memory[0xFF0F] &= !0b00000001;
+            }
+            // handle lcd interrupt
+            else if interrupt_request & 0b00000010 != 0 {
+                println!(">>>> LCD INTERRUPT");
+                gb.ime = false;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc & 0xFF) as u8;
+                gb.pc = 0x48;
+                gb.memory[0xFF0F] &= !0b00000010;
+            }
+            // handle timer interrupt
+            else if interrupt_request & 0b00000100 != 0 {
+                println!(">>>> TIMER INTERRUPT");
+                gb.ime = false;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc & 0xFF) as u8;
+                gb.pc = 0x50;
+                gb.memory[0xFF0F] &= !0b00000100;
+            }
+            // handle serial interrupt
+            if interrupt_request & 0b00001000 != 0 {
+                println!(">>>> SERIAL INTERRUPT");
+                gb.ime = false;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc & 0xFF) as u8;
+                gb.pc = 0x58;
+                gb.memory[0xFF0F] &= !0b00001000;
+            }
+            // handle joypad interrupt
+            else if interrupt_request & 0b00010000 != 0 {
+                println!(">>>> JOYPAD INTERRUPT");
+                gb.ime = false;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc >> 8) as u8;
+                gb.sp -= 1;
+                gb.memory[gb.sp as usize] = (gb.pc & 0xFF) as u8;
+                gb.pc = 0x60;
+                gb.memory[0xFF0F] &= !0b00010000;
+            }
+        }
 
         let op: u8 = gb.read_byte();
 
@@ -155,7 +260,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.b & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.b & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -166,7 +275,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.b & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.b & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -222,7 +335,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.c & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.c & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -233,7 +350,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.c & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.c & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -280,7 +401,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.d & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.d & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -291,7 +416,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.d & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.d & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -346,7 +475,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.e & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.e & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -357,7 +490,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.e & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.e & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -417,7 +554,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.h & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.h & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -428,7 +569,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.h & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.h & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -506,7 +651,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.l & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.l & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -517,7 +666,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.l & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.l & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -637,7 +790,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -648,7 +805,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) == 0 { 0b10000000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) == 0 {
+                    0b10000000
+                } else {
+                    0
+                };
                 gb.registers.f |= 0b00010000;
                 gb.cycles += 1;
             }
@@ -660,7 +821,11 @@ fn main() -> ! {
             0x3F => {
                 debug_print_op(op, "CCF", &gb);
                 gb.registers.f &= 0b10010000;
-                gb.registers.f |= if gb.registers.f & 0b00010000 == 0 { 0b00010000 } else { 0 };
+                gb.registers.f |= if gb.registers.f & 0b00010000 == 0 {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x40 => {
@@ -704,7 +869,7 @@ fn main() -> ! {
                 gb.registers.b = gb.registers.a;
                 gb.cycles += 1;
             }
-            0x48 => { 
+            0x48 => {
                 debug_print_op(op, "LD C, B", &gb);
                 gb.registers.c = gb.registers.b;
                 gb.cycles += 1;
@@ -717,7 +882,7 @@ fn main() -> ! {
             0x4A => {
                 debug_print_op(op, "LD C, D", &gb);
                 gb.registers.c = gb.registers.d;
-                gb.cycles += 1; 
+                gb.cycles += 1;
             }
             0x4B => {
                 debug_print_op(op, "LD C, E", &gb);
@@ -1003,8 +1168,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.b {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x81 => {
@@ -1014,8 +1187,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.c {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x82 => {
@@ -1025,8 +1206,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.d {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x83 => {
@@ -1036,8 +1225,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.e {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x84 => {
@@ -1047,8 +1244,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.h {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x85 => {
@@ -1058,8 +1263,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.l {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x86 => {
@@ -1071,7 +1284,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -1082,106 +1299,234 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.a {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x88 => {
                 debug_print_op(op, "ADC B", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.b).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.b)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.b {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x89 => {
                 debug_print_op(op, "ADC C", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.c).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.c)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.c {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x8A => {
                 debug_print_op(op, "ADC D", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.d).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.d)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.d {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x8B => {
                 debug_print_op(op, "ADC E", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.e).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.e)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.e {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x8C => {
                 debug_print_op(op, "ADC H", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.h).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.h)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.h {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x8D => {
                 debug_print_op(op, "ADC L", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.l).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.l)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.l {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x8E => {
                 debug_print_op(op, "ADC (HL)", &gb);
                 let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
                 let data = gb.fetch_byte(hl);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
                 let result = gb.registers.a.wrapping_add(data).wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
             0x8F => {
                 debug_print_op(op, "ADC A", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_add(gb.registers.a).wrapping_add(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_add(gb.registers.a)
+                    .wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.a {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x90 => {
@@ -1191,8 +1536,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.b {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x91 => {
@@ -1202,8 +1555,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.c {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x92 => {
@@ -1213,8 +1574,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.d {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x93 => {
@@ -1224,8 +1593,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.e {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x94 => {
@@ -1235,8 +1612,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.h {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x95 => {
@@ -1246,8 +1631,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.l {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x96 => {
@@ -1259,7 +1652,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -1270,106 +1667,234 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.a {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x98 => {
                 debug_print_op(op, "SBC B", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.b).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.b)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.b {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x99 => {
                 debug_print_op(op, "SBC C", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.c).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.c)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.c {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x9A => {
                 debug_print_op(op, "SBC D", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.d).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.d)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.d {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x9B => {
                 debug_print_op(op, "SBC E", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.e).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.e)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.e {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x9C => {
                 debug_print_op(op, "SBC H", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.h).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.h)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.h {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x9D => {
                 debug_print_op(op, "SBC L", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.l).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.l)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.l {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0x9E => {
                 debug_print_op(op, "SBC (HL)", &gb);
                 let hl = ((gb.registers.h as u16) << 8) | (gb.registers.l as u16);
                 let data = gb.fetch_byte(hl);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
                 let result = gb.registers.a.wrapping_sub(data).wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
             0x9F => {
                 debug_print_op(op, "SBC A", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
-                let result = gb.registers.a.wrapping_sub(gb.registers.a).wrapping_sub(carry);
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
+                let result = gb
+                    .registers
+                    .a
+                    .wrapping_sub(gb.registers.a)
+                    .wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.a {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xA0 => {
@@ -1504,8 +2029,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.b { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.b & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.b {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xB9 => {
@@ -1514,8 +2047,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.c { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.c & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.c {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xBA => {
@@ -1524,8 +2065,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.d { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.d & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.d {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xBB => {
@@ -1534,8 +2083,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.e { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.e & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.e {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xBC => {
@@ -1544,8 +2101,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.h { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.h & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.h {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xBD => {
@@ -1554,8 +2119,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.l { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.l & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.l {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xBE => {
@@ -1566,7 +2139,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (data & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < data { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -1576,8 +2153,16 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) { 0b00100000 } else { 0 };
-                gb.registers.f |= if gb.registers.a < gb.registers.a { 0b00010000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (gb.registers.a & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if gb.registers.a < gb.registers.a {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 1;
             }
             0xC0 => {
@@ -1642,7 +2227,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -1702,7 +2291,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.b & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.b & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1713,7 +2306,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.b & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.b & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1724,7 +2321,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.c & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.c & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1735,7 +2336,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.d & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.d & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1746,7 +2351,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.e & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.e & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1757,7 +2366,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.h & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.h & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1768,7 +2381,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.l & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.l & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1792,7 +2409,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.a & 0x80) != 0 { 0b00100000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.a & 0x80) != 0 {
+                            0b00100000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00010000;
                         gb.cycles += 1;
                     }
@@ -1803,7 +2424,11 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.b & 0x01) != 0 { 0b00010000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.b & 0x01) != 0 {
+                            0b00010000
+                        } else {
+                            0
+                        };
                         gb.cycles += 1;
                     }
                     0x29 => {
@@ -1813,12 +2438,17 @@ fn main() -> ! {
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                         gb.registers.f |= 0b01000000;
-                        gb.registers.f |= if (gb.registers.c & 0x01) != 0 { 0b00010000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.c & 0x01) != 0 {
+                            0b00010000
+                        } else {
+                            0
+                        };
                         gb.cycles += 1;
                     }
                     0x30 => {
                         debug_print_op(op, "SWAP B", &gb);
-                        let result = ((gb.registers.b & 0x0F) << 4) | ((gb.registers.b & 0xF0) >> 4);
+                        let result =
+                            ((gb.registers.b & 0x0F) << 4) | ((gb.registers.b & 0xF0) >> 4);
                         gb.registers.b = result;
                         gb.registers.f = 0;
                         gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
@@ -1839,28 +2469,44 @@ fn main() -> ! {
                     0x40 => {
                         debug_print_op(op, "BIT 0, B", &gb);
                         gb.registers.f &= 0b10010000;
-                        gb.registers.f |= if (gb.registers.b & 0x01) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.b & 0x01) == 0 {
+                            0b10000000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00100000;
                         gb.cycles += 1;
                     }
                     0x45 => {
                         debug_print_op(op, "BIT 0, L", &gb);
                         gb.registers.f &= 0b10010000;
-                        gb.registers.f |= if (gb.registers.l & 0x01) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.l & 0x01) == 0 {
+                            0b10000000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00100000;
                         gb.cycles += 1;
                     }
                     0x50 => {
                         debug_print_op(op, "BIT 2, B", &gb);
                         gb.registers.f &= 0b10010000;
-                        gb.registers.f |= if (gb.registers.b & 0x04) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.b & 0x04) == 0 {
+                            0b10000000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00100000;
                         gb.cycles += 1;
                     }
                     0x51 => {
                         debug_print_op(op, "BIT 2, C", &gb);
                         gb.registers.f &= 0b10010000;
-                        gb.registers.f |= if (gb.registers.c & 0x04) == 0 { 0b10000000 } else { 0 };
+                        gb.registers.f |= if (gb.registers.c & 0x04) == 0 {
+                            0b10000000
+                        } else {
+                            0
+                        };
                         gb.registers.f |= 0b00100000;
                         gb.cycles += 1;
                     }
@@ -1898,14 +2544,22 @@ fn main() -> ! {
             }
             0xCE => {
                 debug_print_op(op, "ADC n", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
                 let n = gb.read_byte();
                 let result = gb.registers.a.wrapping_add(n).wrapping_add(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -1976,7 +2630,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -2031,14 +2689,22 @@ fn main() -> ! {
             }
             0xDE => {
                 debug_print_op(op, "SBC n", &gb);
-                let carry = if gb.registers.f & 0b00010000 != 0 { 1 } else { 0 };
+                let carry = if gb.registers.f & 0b00010000 != 0 {
+                    1
+                } else {
+                    0
+                };
                 let n = gb.read_byte();
                 let result = gb.registers.a.wrapping_sub(n).wrapping_sub(carry);
                 gb.registers.a = result;
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -2058,7 +2724,11 @@ fn main() -> ! {
                 let n = gb.read_byte();
                 gb.memory[0xFF00 + n as usize] = gb.registers.a;
                 gb.cycles += 3;
-                println!(">>>> HARDWARE WRITE: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + n as u16), gb.registers.a);
+                println!(
+                    ">>>> HARDWARE WRITE: 0x{:02X} 0x{:02X}",
+                    (0xFF00 as u16 + n as u16),
+                    gb.registers.a
+                );
             }
             0xE1 => {
                 debug_print_op(op, "POP HL", &gb);
@@ -2071,7 +2741,11 @@ fn main() -> ! {
                 debug_print_op(op, "LDH (C), A", &gb);
                 gb.memory[0xFF00 + gb.registers.c as usize] = gb.registers.a;
                 gb.cycles += 2;
-                println!(">>>> HARDWARE WRITE: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + gb.registers.c as u16), gb.registers.a);
+                println!(
+                    ">>>> HARDWARE WRITE: 0x{:02X} 0x{:02X}",
+                    (0xFF00 as u16 + gb.registers.c as u16),
+                    gb.registers.a
+                );
             }
             0xE5 => {
                 debug_print_op(op, "PUSH HL", &gb);
@@ -2112,8 +2786,16 @@ fn main() -> ! {
                 gb.registers.h = (result >> 8) as u8;
                 gb.registers.l = (result & 0xFF) as u8;
                 gb.registers.f = 0;
-                gb.registers.f |= if (sp & 0xF) + (e & 0xF) > 0xF { 0b00100000 } else { 0 };
-                gb.registers.f |= if (sp & 0xFF) + (e & 0xFF) > 0xFF { 0b00010000 } else { 0 };
+                gb.registers.f |= if (sp & 0xF) + (e & 0xF) > 0xF {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if (sp & 0xFF) + (e & 0xFF) > 0xFF {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 4;
             }
             0xE9 => {
@@ -2152,7 +2834,11 @@ fn main() -> ! {
                 let n = gb.read_byte();
                 gb.registers.a = gb.memory[0xFF00 + n as usize];
                 gb.cycles += 3;
-                println!(">>>> HARDWARE READ: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + n as u16), gb.registers.a);
+                println!(
+                    ">>>> HARDWARE READ: 0x{:02X} 0x{:02X}",
+                    (0xFF00 as u16 + n as u16),
+                    gb.registers.a
+                );
             }
             0xF1 => {
                 debug_print_op(op, "POP AF", &gb);
@@ -2165,7 +2851,11 @@ fn main() -> ! {
                 debug_print_op(op, "LD A, (C)", &gb);
                 gb.registers.a = gb.memory[0xFF00 + gb.registers.c as usize];
                 gb.cycles += 2;
-                println!(">>>> HARDWARE READ: 0x{:02X} 0x{:02X}", (0xFF00 as u16 + gb.registers.c as u16), gb.registers.a);
+                println!(
+                    ">>>> HARDWARE READ: 0x{:02X} 0x{:02X}",
+                    (0xFF00 as u16 + gb.registers.c as u16),
+                    gb.registers.a
+                );
             }
             0xF3 => {
                 debug_print_op(op, "DI", &gb);
@@ -2209,8 +2899,16 @@ fn main() -> ! {
                 gb.registers.h = (result >> 8) as u8;
                 gb.registers.l = (result & 0xFF) as u8;
                 gb.registers.f = 0;
-                gb.registers.f |= if (sp & 0xF) + (e & 0xF) > 0xF { 0b00100000 } else { 0 };
-                gb.registers.f |= if (sp & 0xFF) + (e & 0xFF) > 0xFF { 0b00010000 } else { 0 };
+                gb.registers.f |= if (sp & 0xF) + (e & 0xF) > 0xF {
+                    0b00100000
+                } else {
+                    0
+                };
+                gb.registers.f |= if (sp & 0xFF) + (e & 0xFF) > 0xFF {
+                    0b00010000
+                } else {
+                    0
+                };
                 gb.cycles += 3;
             }
             0xF9 => {
@@ -2237,7 +2935,11 @@ fn main() -> ! {
                 gb.registers.f = 0;
                 gb.registers.f |= if result == 0 { 0b10000000 } else { 0 };
                 gb.registers.f |= 0b01000000;
-                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) { 0b00100000 } else { 0 };
+                gb.registers.f |= if (gb.registers.a & 0xF) < (n & 0xF) {
+                    0b00100000
+                } else {
+                    0
+                };
                 gb.registers.f |= if gb.registers.a < n { 0b00010000 } else { 0 };
                 gb.cycles += 2;
             }
@@ -2259,17 +2961,37 @@ fn main() -> ! {
 
         let cycles_elapsed: u128 = gb.cycles - cycles_start;
         gb.div_cycles += cycles_elapsed;
-        
+
         // handle DIV register every 256 cycles
         let div = gb.memory[0xFF04];
         // check if div was written to
         if div != div_initial {
             gb.memory[0xFF04] = 0x00;
         }
-
         if gb.div_cycles >= 256 {
             gb.memory[0xFF04] = gb.memory[0xFF04].wrapping_add(1);
             gb.div_cycles -= 256;
+        }
+
+        // handle TIMA register
+        let tac = gb.memory[0xFF07];
+        if tac & 0b00000100 != 0 {
+            let cycles_per_tick = match tac & 0b00000011 {
+                0b00 => 1024,
+                0b01 => 16,
+                0b10 => 64,
+                0b11 => 256,
+                _ => panic!("invalid TAC value: 0x{:02X}", tac),
+            };
+            gb.tima_cycles += cycles_elapsed;
+            if gb.tima_cycles >= cycles_per_tick {
+                gb.tima_cycles -= cycles_per_tick;
+                gb.memory[0xFF05] = gb.memory[0xFF05].wrapping_add(1);
+                if gb.memory[0xFF05] == 0x00 {
+                    gb.memory[0xFF05] = gb.memory[0xFF06]; // reload TIMA with TMA
+                    gb.memory[0xFF0F] |= 0b00000100; // set TIMA overflow flag
+                }
+            }
         }
 
         // std::thread::sleep(std::time::Duration::from_millis(10));
