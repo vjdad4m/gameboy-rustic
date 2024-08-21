@@ -1,3 +1,9 @@
+extern crate sdl2;
+
+mod display;
+
+use display::setup_display;
+use sdl2::{event::Event, keyboard::Keycode};
 use std::time::{Duration, Instant};
 
 struct GameBoyRegister {
@@ -11,6 +17,17 @@ struct GameBoyRegister {
     l: u8,
 }
 
+struct GameBoyJoypad  {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+    a: bool,
+    b: bool,
+    start: bool,
+    select: bool,
+}
+
 struct GameBoyState {
     memory: [u8; 0xFFFF + 1],
     registers: GameBoyRegister,
@@ -21,6 +38,7 @@ struct GameBoyState {
     cycles: u128,
     div_cycles: u128,
     tima_cycles: u128,
+    joypad: GameBoyJoypad,
 }
 
 impl GameBoyState {
@@ -44,6 +62,16 @@ impl GameBoyState {
             cycles: 0,
             div_cycles: 0,
             tima_cycles: 0,
+            joypad: GameBoyJoypad {
+                up: false,
+                down: false,
+                left: false,
+                right: false,
+                a: false,
+                b: false,
+                start: false,
+                select: false,
+            },
         }
     }
 
@@ -136,6 +164,31 @@ impl GameBoyState {
         }
         println!();
     }
+
+    fn handle_key(&mut self, key: Keycode, pressed: bool) {
+        println!("Key: {:?} pressed: {}", key, pressed);
+        fn has_changed(old: bool, new: bool) -> bool {
+            old != new
+        }
+        let mut previous_state: bool = false;
+        match key {
+            Keycode::W => { previous_state = self.joypad.up; self.joypad.up = pressed; },
+            Keycode::S => { previous_state = self.joypad.down; self.joypad.down = pressed; },
+            Keycode::A => { previous_state = self.joypad.left; self.joypad.left = pressed; },
+            Keycode::D => { previous_state = self.joypad.right; self.joypad.right = pressed; },
+            Keycode::Z => { previous_state = self.joypad.a; self.joypad.a = pressed; },
+            Keycode::X => { previous_state = self.joypad.b; self.joypad.b = pressed; },
+            Keycode::Return => { previous_state = self.joypad.start; self.joypad.start = pressed; },
+            Keycode::RShift => { previous_state = self.joypad.select; self.joypad.select = pressed; },
+            _ => {
+                return; 
+            }
+        }
+        // trigger joypad interrupt
+        if has_changed(previous_state, pressed) {
+            self.memory[0xFF0F] |= 0b00010000;
+        }
+    }
 }
 
 fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
@@ -148,6 +201,8 @@ fn debug_print_op(op: u8, name: &str, state: &GameBoyState) {
 }
 
 fn main() -> ! {
+    let (mut canvas, mut event_pump) = setup_display();
+
     let rom_file: &str = "./rom/snake.gb";
     let rom: Vec<u8> = std::fs::read(rom_file).unwrap();
     let mut gb = GameBoyState::new();
@@ -1122,6 +1177,7 @@ fn main() -> ! {
                 0x76 => {
                     debug_print_op(op, "HALT", &gb);
                     gb.halted = true;
+                    gb.cycles += 1;
                 }
                 0x77 => {
                     debug_print_op(op, "LD (HL), A", &gb);
@@ -3382,6 +3438,22 @@ fn main() -> ! {
         if time_elapsed_ns < target_time_ns {
             let sleep_time = Duration::from_nanos(target_time_ns as u64 - time_elapsed_ns as u64);
             std::thread::sleep(sleep_time);
+        }
+
+        // update screen
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => {
+                    std::process::exit(0);
+                }
+                Event::KeyDown { keycode: Some(keycode), .. } => {
+                    gb.handle_key(keycode, true);
+                }
+                Event::KeyUp { keycode: Some(keycode), .. } => {
+                    gb.handle_key(keycode, false);
+                }
+                _ => {}
+            }
         }
     }
 }

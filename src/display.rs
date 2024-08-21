@@ -8,7 +8,7 @@ pub fn setup_display() -> (Canvas<Window>, EventPump) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("GameBoy Rustic Emulator", 640, 320)
+        .window("GameBoy Rustic Emulator", 160, 144)
         .position_centered()
         .build()
         .unwrap();
