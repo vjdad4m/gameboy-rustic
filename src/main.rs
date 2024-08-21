@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 struct GameBoyRegister {
     a: u8,
     b: u8,
@@ -163,6 +165,7 @@ fn main() -> ! {
     loop {
         let cycles_start: u128 = gb.cycles;
         let div_initial: u8 = gb.memory[0xFF04];
+        let start_time = Instant::now();
 
         // check for interrupts
         if gb.ime {
@@ -3371,6 +3374,14 @@ fn main() -> ! {
                     gb.memory[0xFF0F] |= 0b00000100; // set TIMA overflow flag
                 }
             }
+        }
+
+        // set max speed to 4.194304 MHz
+        let time_elapsed_ns = Instant::now().duration_since(start_time).as_nanos();
+        let target_time_ns = 1_000_000_000 / 4_194_304;
+        if time_elapsed_ns < target_time_ns {
+            let sleep_time = Duration::from_nanos(target_time_ns as u64 - time_elapsed_ns as u64);
+            std::thread::sleep(sleep_time);
         }
     }
 }
